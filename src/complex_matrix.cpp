@@ -1,8 +1,10 @@
 #include "complex_matrix.h"
+#include "cplx"
 #include <fileioc.h>
 
 #define IN_RANGE(num, low, high) (low <= num && num < high)
 #define VALID_INDEX(i, size) IN_RANGE(i, 0, size)
+#define CPLX_MATRIX_ELEMENT(data, row, col) (*((cplx_t*) &OS_MATRIX_ELEMENT(data, row, 2*col)))
 
 ComplexMatrix::ComplexMatrix(const char *name) {
     ti_RclVar(OS_TYPE_MATRIX, name, (void**) &data);
@@ -10,81 +12,97 @@ ComplexMatrix::ComplexMatrix(const char *name) {
 
 void ComplexMatrix::Interchange(uint8_t row1, uint8_t row2) {
     if (VALID_INDEX(row1, data->rows) && VALID_INDEX(row2, data->rows)) {
-        ti::real temp;
-        for (uint8_t col = 0; col < data->cols; col++) {
-            temp = OS_MATRIX_ELEMENT(data, row1, col);
-            OS_MATRIX_ELEMENT(data, row1, col) = OS_MATRIX_ELEMENT(data, row2, col);
-            OS_MATRIX_ELEMENT(data, row2, col) = temp;
+        ti::cplx temp;
+        for (uint8_t col = 0; col < data->cols/2; col++) {
+            temp = CPLX_MATRIX_ELEMENT(data, row1, col);
+            CPLX_MATRIX_ELEMENT(data, row1, col) = CPLX_MATRIX_ELEMENT(data, row2, col);
+            CPLX_MATRIX_ELEMENT(data, row2, col) = temp;
         }
     }
 }
 
 void ComplexMatrix::MultiplyRow(uint8_t row, cplx_t multiplier) {
     if (VALID_INDEX(row, data->rows)) {
-        ti::real real, imag;
-        for (uint8_t col = 0; col < data->cols; col+=2) {
-            real = OS_MATRIX_ELEMENT(data, row, col);
-            imag = OS_MATRIX_ELEMENT(data, row, col + 1);
-
-            OS_MATRIX_ELEMENT(data, row, col) = real * multiplier.real - imag * multiplier.imag;
-            OS_MATRIX_ELEMENT(data, row, col + 1) = imag * multiplier.real + real * multiplier.imag;
+        ti::cplx elem;
+        for (uint8_t col = 0; col < data->cols/2; col++) {
+            elem = CPLX_MATRIX_ELEMENT(data, row, col);
+            CPLX_MATRIX_ELEMENT(data, row, col) = elem * multiplier;
         }
     }
 }
 
 void ComplexMatrix::DivideRow(uint8_t row, cplx_t divisor) {
-    ti::real realDivisor = ti::real(divisor.real) * divisor.real + ti::real(divisor.imag) * divisor.imag;
-    MultiplyRow(row, cplx_t{ti::real(divisor.real) / realDivisor, -ti::real(divisor.imag) / realDivisor});
+    if (VALID_INDEX(row, data->rows)) {
+        ti::cplx elem;
+        for (uint8_t col = 0; col < data->cols/2; col++) {
+            elem = CPLX_MATRIX_ELEMENT(data, row, col);
+            CPLX_MATRIX_ELEMENT(data, row, col) = elem / divisor;
+        }
+    }
 }
 
 void ComplexMatrix::CombineRows(uint8_t targetRow, uint8_t sourceRow, cplx_t multiplier) {
     if (VALID_INDEX(targetRow, data->rows) && VALID_INDEX(sourceRow, data->rows)) {
-        ti::real targetReal, targetImag;
-        ti::real sourceReal, sourceImag;
-
-        for (uint8_t col = 0; col < data->cols; col+=2) {
-            targetReal = OS_MATRIX_ELEMENT(data, targetRow, col);
-            targetImag = OS_MATRIX_ELEMENT(data, targetRow, col + 1);
-            sourceReal = OS_MATRIX_ELEMENT(data, sourceRow, col);
-            sourceImag = OS_MATRIX_ELEMENT(data, sourceRow, col + 1);
-            
-            OS_MATRIX_ELEMENT(data, targetRow, col) = 
-                targetReal + (sourceReal * multiplier.real - sourceImag * multiplier.imag);
-            OS_MATRIX_ELEMENT(data, targetRow, col + 1) =
-                targetImag + (sourceImag * multiplier.real + sourceReal * multiplier.imag);
+        for (uint8_t col = 0; col < data->cols/2; col++) {
+            ti::cplx(CPLX_MATRIX_ELEMENT(data, targetRow, col)) += ti::cplx(CPLX_MATRIX_ELEMENT(data, sourceRow, col)) * multiplier;
         }
     }
 }
 
 void ComplexMatrix::RREF() {
     uint8_t row = 0, col = 0;
-    while (col < data->cols && row < data->rows) {
+    while (col < data->cols/2 && row < data->rows) {
 
         // If the pivot element is zero 
-        if (ti::real() == OS_MATRIX_ELEMENT(data, row, col) && ti::real() == OS_MATRIX_ELEMENT(data, row, col + 1)) {
+        if (ti::cplx() == CPLX_MATRIX_ELEMENT(data, row, col)) {
             // Search the column for a non zero pivot
             uint8_t nonZeroRow = row + 1;
             for (; nonZeroRow < data->rows; nonZeroRow++) {
                 // If one is found interchange the rows
-                if (ti::real() != OS_MATRIX_ELEMENT(data, nonZeroRow, col) || ti::real() != OS_MATRIX_ELEMENT(data, nonZeroRow, col + 1)) {
+                if (ti::cplx() != CPLX_MATRIX_ELEMENT(data, nonZeroRow, col)) {
                     Interchange(row, nonZeroRow);
                 }
             }
+
             // Otherwise
-            if (nonZeroRow == data->rows) col+=2; break;
+            if (nonZeroRow == data->rows) col++; break;
         }
 
-        DivideRow(row, cplx_t{OS_MATRIX_ELEMENT(data, row, col), OS_MATRIX_ELEMENT(data, row, col + 1)});
+        DivideRow(row, CPLX_MATRIX_ELEMENT(data, row, col));
         for (uint8_t otherRow = 0; otherRow < data->rows; otherRow++) {
             if (otherRow == row) continue;
-            CombineRows(otherRow, row, cplx_t{-ti::real(OS_MATRIX_ELEMENT(data, otherRow, col)), -ti::real(OS_MATRIX_ELEMENT(data, otherRow, col + 1))});
+            CombineRows(otherRow, row, -ti::cplx(CPLX_MATRIX_ELEMENT(data, otherRow, col)));
         }
 
         row++;
-        col+=2;
+        col++;
     }
 }
 
 void ComplexMatrix::REF() {
-    RREF();
+    uint8_t row = 0, col = 0;
+    while (col < data->cols/2 && row < data->rows) {
+
+        // If the pivot element is zero 
+        if (ti::cplx() == CPLX_MATRIX_ELEMENT(data, row, col)) {
+            // Search the column for a non zero pivot
+            uint8_t nonZeroRow = row + 1;
+            for (; nonZeroRow < data->rows; nonZeroRow++) {
+                // If one is found interchange the rows
+                if (ti::cplx() != CPLX_MATRIX_ELEMENT(data, nonZeroRow, col)) {
+                    Interchange(row, nonZeroRow);
+                }
+            }
+
+            // Otherwise
+            if (nonZeroRow == data->rows) col++; break;
+        }
+
+        for (uint8_t otherRow = row + 1; otherRow < data->rows; otherRow++) {
+            CombineRows(otherRow, row, -ti::cplx(CPLX_MATRIX_ELEMENT(data, otherRow, col)) / CPLX_MATRIX_ELEMENT(data, row, col));
+        }
+
+        row++;
+        col++;
+    }
 }
