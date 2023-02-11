@@ -1,7 +1,7 @@
 #include <ti/real.h>
 using namespace ti::literals;
 
-// namespace ti {
+namespace ti {
     class cplx {
 
     public:
@@ -53,6 +53,7 @@ using namespace ti::literals;
         
         constexpr cplx operator+() const noexcept { return *this; }
         constexpr cplx operator-() const noexcept { return cplx(os_RealNeg(&value.real), os_RealNeg(&value.imag)); }
+        constexpr cplx conj() const noexcept { return cplx(value.real, os_RealNeg(&value.imag)); }
 
         cplx operator+(const cplx& rhs) const { cplx result(*this); return result += rhs; }
         cplx operator-(const cplx& rhs) const { cplx result(*this); return result -= rhs; }
@@ -65,4 +66,4 @@ using namespace ti::literals;
     private:
         cplx_t value;
     };
-// }
+}
