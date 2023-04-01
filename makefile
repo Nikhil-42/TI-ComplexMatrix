@@ -2,7 +2,7 @@
 # Makefile Options
 # ----------------------------
 
-NAME = CPLXMAT
+NAME = cplxmat
 ICON = icon.png
 DESCRIPTION = "Allows you to create and manipulate complex matricies."
 COMPRESSED = NO
