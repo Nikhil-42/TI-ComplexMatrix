@@ -1,0 +1,69 @@
+#include <ti/real.h>
+using namespace ti::literals;
+
+namespace ti {
+    class cplx {
+
+    public:
+        // ======== constructors ========
+
+        constexpr cplx(real_t real, real_t imag) noexcept : value{real, imag} {}
+        constexpr cplx(const cplx_t& val) noexcept : value(val) {}
+        constexpr cplx() noexcept : value{0_r, 0_r} {}
+
+        // ======== converting operators ========
+
+        constexpr operator cplx_t() const noexcept { return value; }
+        
+        // ======== common operators ========
+
+        cplx& operator+=(const cplx& rhs) {
+            value.real = os_RealAdd(&value.real, &rhs.value.real);
+            value.imag = os_RealAdd(&value.imag, &rhs.value.imag);
+            return *this;
+        }
+
+        cplx& operator-=(const cplx& rhs) {
+            value.real = os_RealSub(&value.real, &rhs.value.real);
+            value.imag = os_RealSub(&value.imag, &rhs.value.imag);
+            return *this;
+        }
+
+        cplx& operator*=(const cplx& rhs) {
+            real_t realProd = os_RealMul(&value.real, &rhs.value.real);
+            real_t imagProd = os_RealMul(&value.imag, &rhs.value.imag);
+            value.real = os_RealSub(&realProd, &imagProd);
+            realProd = os_RealMul(&value.real, &rhs.value.imag);
+            imagProd = os_RealMul(&value.imag, &rhs.value.real);
+            value.imag = os_RealAdd(&realProd, &imagProd);
+            return *this;
+        }
+
+        cplx& operator/=(const cplx& rhs) {
+            real_t realProd = os_RealMul(&rhs.value.real, &rhs.value.real);
+            real_t imagProd = os_RealMul(&rhs.value.imag, &rhs.value.imag);
+
+            real_t realDivisor = os_RealAdd(&realProd, &imagProd);
+            real_t imagConj = os_RealNeg(&rhs.value.imag);
+            return (*this) *= cplx_t{
+                os_RealDiv(&rhs.value.real, &realDivisor),
+                os_RealDiv(&imagConj, &realDivisor)
+            };
+        }
+        
+        constexpr cplx operator+() const noexcept { return *this; }
+        constexpr cplx operator-() const noexcept { return cplx(os_RealNeg(&value.real), os_RealNeg(&value.imag)); }
+        constexpr cplx conj() const noexcept { return cplx(value.real, os_RealNeg(&value.imag)); }
+
+        cplx operator+(const cplx& rhs) const { cplx result(*this); return result += rhs; }
+        cplx operator-(const cplx& rhs) const { cplx result(*this); return result -= rhs; }
+        cplx operator*(const cplx& rhs) const { cplx result(*this); return result *= rhs; }
+        cplx operator/(const cplx& rhs) const { cplx result(*this); return result /= rhs; }
+
+        bool operator==(const cplx& rhs) const noexcept { return os_RealCompare(&value.real, &rhs.value.real) == 0 && os_RealCompare(&value.imag, &rhs.value.imag) == 0; }
+        bool operator!=(const cplx& rhs) const noexcept { return !(*this == rhs); }
+
+    private:
+        cplx_t value;
+    };
+}
